@@ -5,13 +5,15 @@ import (
 	"time"
 )
 
-func fileLog(file *os.File, message string) {
-	_, err = file.Write([]byte(time.Now().Format(time.RFC3339Nano) + message + "\n"))
-	if err != nil {
-		// Exit the program
-		// As fileLog.Fatal might not be accessible we directly exit the program here with a single-use exit code
-		//TODO document exit codes
-		os.Exit(500)
+func fileLog(file *os.File, c chan string) {
+	for msg := range c {
+		_, err = file.Write([]byte(time.Now().Format(time.RFC3339Nano) + msg + "\n"))
+		if err != nil {
+			// Exit the program
+			// As fileLog.Fatal might not be accessible we directly exit the program here with a single-use exit code
+			//TODO document exit codes
+			os.Exit(500)
+		}
 	}
 }
 

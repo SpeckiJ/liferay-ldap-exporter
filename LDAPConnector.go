@@ -26,7 +26,7 @@ func connectLDAP(state *State) error {
 	// Bind with Admin credentials
 	err = conn.Bind(state.Ldapconf.AdminDN, state.Ldapconf.AdminPass)
 	state.ldapsession = &ldapSession{conn}
-	fileLog(state.logFile, "Connected to LDAP")
+	state.errC <- "Connected to LDAP!"
 	return nil
 }
 
@@ -71,8 +71,8 @@ func insertIfNotExistsOrganizationalUnit(state *State, name string) error {
 	return nil
 }
 
-// LDAPAddUser adds User with given dn to LDAP
-func upsertLDAPUser(state *State, user User) error {
+// LDAPAddUser adds User_ with given dn to LDAP
+func upsertLDAPUser(state *State, user User_) error {
 	searchRequest := ldap.NewSearchRequest(
 		state.Ldapconf.DN,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
@@ -87,7 +87,7 @@ func upsertLDAPUser(state *State, user User) error {
 
 	dn := "cn=" + user.Screenname + ",ou=users," + state.Ldapconf.DN
 	if len(sr.Entries) > 0 {
-		// Update existing User
+		// Update existing User_
 		ar := ldap.NewModifyRequest(dn)
 		ar.Replace("sn", []string{user.Lastname})
 		ar.Replace("givenName", []string{user.Firstname})
@@ -96,7 +96,7 @@ func upsertLDAPUser(state *State, user User) error {
 		err = state.ldapsession.Modify(ar)
 		return nil
 	} else {
-		// Create new User
+		// Create new User_
 		ar := ldap.NewAddRequest(dn)
 		ar.Attribute("objectclass", []string{"inetOrgPerson", "person", "top", "organizationalPerson"})
 		ar.Attribute("cn", []string{user.Screenname})
@@ -109,7 +109,7 @@ func upsertLDAPUser(state *State, user User) error {
 	}
 }
 
-func upsertLDAPGroupOfNames(state *State, name, description, ou string, users []User) error {
+func upsertLDAPGroupOfNames(state *State, name, description, ou string, users []User_) error {
 	searchRequest := ldap.NewSearchRequest(
 		state.Ldapconf.DN,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,

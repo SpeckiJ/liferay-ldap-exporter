@@ -13,8 +13,13 @@ type dbSession struct {
 type dbConfig struct {
 	Addr     string
 	Database string
+	Schema   string
 	User     string
 	Pass     string
+}
+
+type dbLogger struct {
+	errC chan string
 }
 
 func init() {
@@ -22,25 +27,59 @@ func init() {
 	orm.RegisterTable((*UsersUsergroups)(nil))
 }
 
+func (d dbLogger) BeforeQuery(c context.Context, q *pg.QueryEvent) (context.Context, error) {
+	return c, nil
+}
+
+func (d dbLogger) AfterQuery(c context.Context, q *pg.QueryEvent) error {
+	query, err := q.FormattedQuery()
+	if err == nil {
+		d.errC <- string(query)
+	} else {
+		d.errC <- err.Error()
+	}
+	return nil
+}
+
 func connectDB(state *State) {
+	orm.SetTableNameInflector(func(s string) string {
+		return s
+	})
+
 	state.dbsession = &dbSession{pg.Connect(&pg.Options{
 		Addr:     state.Dbconf.Addr,
 		Database: state.Dbconf.Database,
 		User:     state.Dbconf.User,
 		Password: state.Dbconf.Pass,
+		PoolSize: 1,
+		OnConnect: func(ctx context.Context, conn *pg.Conn) error {
+			_, err := conn.Exec("set search_path=?", state.Dbconf.Schema)
+			if err != nil {
+				state.errC <- err.Error()
+			}
+			return nil
+		},
 	})}
-	fileLog(state.logFile, "Connected to DB")
+
+	if verbose {
+		state.dbsession.AddQueryHook(dbLogger{errC: state.errC})
+	}
 }
 
 // Checks whether there is an active DB Connection
-func checkConnection(session *dbSession) error {
+func checkConnection(state *State) error {
 	ctx := context.Background()
-	err := session.Ping(ctx)
+	err := state.dbsession.Ping(ctx)
+	if err == nil {
+		state.errC <- "Connected to DB!"
+	} else {
+		state.errC <- "Could not connect to DB:" + err.Error()
+	}
 	return err
 }
 
-func getAllUsers(session *dbSession) ([]User, error) {
-	var users []User
+func getAllUsers(session *dbSession) ([]User_, error) {
+	var users []User_
 	err := session.Model(&users).Select()
 	if err != nil {
 		panic(err)
@@ -59,8 +98,8 @@ func getAllUsersGroupsWithUsers(session *dbSession) ([]Usergroup, error) {
 	return groups, nil
 }
 
-func getAllRolesWithUsers(session *dbSession) ([]Role, error) {
-	var roles []Role
+func getAllRolesWithUsers(session *dbSession) ([]Role_, error) {
+	var roles []Role_
 	err := session.Model(&roles).
 		Relation("Users").
 		Select()
